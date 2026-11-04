@@ -1,0 +1,34 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# --- Секреты и личные данные ---
+# Настройки (ключ DeepL, e-mail, путь к хранилищу) и кеш программа хранит в %APPDATA%\WordCatch,
+# то есть вне репозитория. Правила ниже — страховка, если их скопируют в папку проекта.
+config.json
+cache.db
+*.db
+*.sqlite
+*.lock
+.env
+.env.*
+*.key
+secrets.*
+
+# --- Временные файлы WordCatch ---
+*.wordcatch.tmp
+
+# --- Редакторы и система ---
+.idea/
+.vscode/
+.claude/settings.local.json
+Thumbs.db
+desktop.ini
+.DS_Store
