@@ -27,23 +27,37 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 BAND_HALF_HEIGHT = 220  # сколько экрана выше и ниже курсора распознаём в режиме слова (логические px)
 
 
-def make_icon(accent: str) -> QIcon:
-    pix = QPixmap(64, 64)
+def make_icon_pixmap(accent: str, size: int = 64) -> QPixmap:
+    """Значок «Aя»: рисуется в сетке 64×64 и масштабируется до нужного размера."""
+    pix = QPixmap(size, size)
     pix.fill(Qt.transparent)
     p = QPainter(pix)
     p.setRenderHint(QPainter.Antialiasing)
+    p.setRenderHint(QPainter.TextAntialiasing)
+    p.scale(size / 64, size / 64)
     p.setBrush(QColor(accent))
     p.setPen(Qt.NoPen)
     p.drawRoundedRect(4, 4, 56, 56, 14, 14)
     p.setPen(QColor("#1c1d22"))
-    f = QFont("Segoe UI", 26, QFont.Bold)
+    f = QFont("Segoe UI")
+    f.setPixelSize(30)
+    f.setBold(True)
     p.setFont(f)
-    p.drawText(pix.rect().adjusted(0, -2, 0, 0), Qt.AlignCenter, "Aя")
+    p.drawText(QRect(0, -2, 64, 64), Qt.AlignCenter, "Aя")
     p.end()
-    return QIcon(pix)
+    return pix
+
+
+def make_icon(accent: str) -> QIcon:
+    icon = QIcon()
+    for size in (16, 24, 32, 48, 64):
+        icon.addPixmap(make_icon_pixmap(accent, size))
+    return icon
 
 
 def autostart_command() -> str:
+    if getattr(sys, "frozen", False):  # собранный WordCatch.exe
+        return f'"{sys.executable}"'
     exe = Path(sys.executable)
     pyw = exe.with_name("pythonw.exe") if exe.name.lower() == "python.exe" else exe
     return f'"{pyw}" "{PROJECT_DIR / "run.pyw"}"'
@@ -228,12 +242,50 @@ class Controller(QObject):
         win.activateWindow()
 
 
+def selftest(out_path: str) -> int:
+    """WordCatch.exe --selftest out.txt — проверка собранного exe: OCR (en+ru), лемматизатор, данные."""
+    import simplemma
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QGuiApplication, QImage
+
+    from . import irregular
+    from .capture import recognize
+
+    lines_out = []
+    try:
+        img = QImage(900, 120, QImage.Format_ARGB32_Premultiplied)
+        img.fill(QColor("white"))
+        p = QPainter(img)
+        p.setPen(QColor("black"))
+        f = QFont("Segoe UI")
+        f.setPixelSize(16)
+        p.setFont(f)
+        p.drawText(10, 40, "They went home early, tired but happy.")
+        p.drawText(10, 80, "Они вернулись домой уставшие.")
+        p.end()
+        shot = Shot(QGuiApplication.primaryScreen(), img, QPoint(0, 0), 1.0)
+        lines_out.append("ocr: " + " | ".join(ln.text for ln in recognize(shot, 2.0)))
+        lines_out.append(f"ru ocr: {ocr.russian_language()}")
+        lines_out.append(f"lemma: {simplemma.lemmatize('struggling', lang='en')} {simplemma.lemmatize('домой', lang='ru')}")
+        lines_out.append(f"irregular: {irregular.lookup('went')[0].forms_text}")
+        code = 0
+    except Exception as e:  # noqa: BLE001
+        import traceback
+        lines_out.append("ERROR: " + "".join(traceback.format_exception(e)))
+        code = 1
+    Path(out_path).write_text("\n".join(lines_out), encoding="utf-8")
+    return code
+
+
 def main() -> int:
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     qapp = QApplication(sys.argv)
+    if "--selftest" in sys.argv:
+        return selftest(sys.argv[sys.argv.index("--selftest") + 1])
     qapp.setApplicationName(APP_NAME)
     qapp.setQuitOnLastWindowClosed(False)
     qapp.setFont(QFont("Segoe UI", 10))
+    qapp.setWindowIcon(make_icon(theme_for(Config.load().theme).accent))
 
     lock = QLockFile(str(app_dir() / "wordcatch.lock"))
     if not lock.tryLock(100):

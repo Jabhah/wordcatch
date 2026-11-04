@@ -32,3 +32,6 @@ secrets.*
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# --- Сборка exe ---
+assets/version_info.txt
