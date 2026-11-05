@@ -48,7 +48,8 @@ class SettingsDialog(QDialog):
         kl.addWidget(self.deepl, 1)
         kl.addWidget(check)
         form.addRow("Ключ DeepL API", key_row)
-        self.key_status = QLabel("Бесплатный ключ: deepl.com/pro-api → тариф API Free (500 000 символов в месяц)")
+        self.key_status = QLabel("Бесплатный ключ: deepl.com/pro-api → тариф API Free (500 000 символов в месяц).\n"
+                                 "Вводится один раз: хранится в диспетчере учётных данных Windows.")
         self.key_status.setWordWrap(True)
         self.key_status.setProperty("role", "muted")
         form.addRow("", self.key_status)

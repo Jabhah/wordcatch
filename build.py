@@ -1,10 +1,11 @@
-"""Собирает dist/WordCatch.exe (один файл, без консоли).
+"""Собирает dist/WordCatch/WordCatch.exe (папка, без консоли) и архив dist/WordCatch-<версия>-win64.zip.
 
     .venv\\Scripts\\python -m pip install pyinstaller
     .venv\\Scripts\\python build.py
 """
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -51,7 +52,19 @@ def make_version_file() -> None:
 if __name__ == "__main__":
     make_icon()
     make_version_file()
+    old_onefile = ROOT / "dist" / "WordCatch.exe"   # от прежней однофайловой сборки
+    if old_onefile.is_file():
+        old_onefile.unlink()
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "WordCatch.spec"],
                    cwd=ROOT, check=True)
-    exe = ROOT / "dist" / "WordCatch.exe"
-    print(f"\nГотово: {exe} ({exe.stat().st_size / 1_048_576:.1f} МБ)")
+    folder = ROOT / "dist" / "WordCatch"
+    size = sum(f.stat().st_size for f in folder.rglob("*") if f.is_file())
+    # zip для релиза: внутри папка WordCatch/ с WordCatch.exe
+    archive = ROOT / "dist" / f"WordCatch-{__version__}-win64.zip"
+    archive.unlink(missing_ok=True)
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for f in sorted(folder.rglob("*")):
+            if f.is_file():
+                z.write(f, f.relative_to(folder.parent))
+    print(f"\nГотово: {folder / 'WordCatch.exe'} (папка {size / 1_048_576:.0f} МБ)")
+    print(f"Архив для релиза: {archive} ({archive.stat().st_size / 1_048_576:.1f} МБ)")

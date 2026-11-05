@@ -1,8 +1,8 @@
-# Сборка WordCatch.exe:  .venv\Scripts\python build.py   (или .venv\Scripts\pyinstaller WordCatch.spec)
+# Сборка dist/WordCatch/WordCatch.exe + zip для релиза:  .venv\Scripts\python build.py   (или .venv\Scripts\pyinstaller WordCatch.spec)
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 import simplemma
 
@@ -13,7 +13,10 @@ datas = [
     (str(SIMPLEMMA / "strategies/dictionaries/data/en.plzma"), "simplemma/strategies/dictionaries/data"),
     (str(SIMPLEMMA / "strategies/dictionaries/data/ru.plzma"), "simplemma/strategies/dictionaries/data"),
 ]
-hiddenimports = collect_submodules("winrt") + [
+# keyring находит хранилище через метаданные пакета — без них в exe не будет диспетчера учётных данных
+datas += copy_metadata("keyring")
+hiddenimports = collect_submodules("winrt") + collect_submodules("keyring.backends") + [
+    "win32ctypes.core",
     "pynput.mouse._win32",
     "pynput.keyboard._win32",
     "pynput._util.win32",
@@ -35,14 +38,17 @@ a = Analysis(
     noarchive=False,
 )
 pyz = PYZ(a.pure)
+# Сборка в папку dist/WordCatch/: exe + _internal рядом. Ничего не распаковывается в %TEMP%
+# при каждом запуске, старт быстрее, после сбоя не остаётся мусора.
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
+    [],
+    exclude_binaries=True,
     name="WordCatch",
     icon="assets/wordcatch.ico",
     console=False,
     upx=False,
     version="assets/version_info.txt",
 )
+coll = COLLECT(exe, a.binaries, a.datas, name="WordCatch", upx=False)

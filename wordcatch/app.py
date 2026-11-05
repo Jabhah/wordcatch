@@ -72,6 +72,21 @@ def autostart_enabled() -> bool:
         return False
 
 
+def fix_autostart_path() -> None:
+    """Если автозапуск включён, но указывает на старое место (программу обновили или перенесли),
+    переписываем его на текущий exe — иначе после перезагрузки WordCatch не стартует."""
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            current, _ = winreg.QueryValueEx(k, APP_NAME)
+    except OSError:
+        return
+    if current != autostart_command():
+        try:
+            set_autostart(True)
+        except OSError:
+            pass
+
+
 def set_autostart(on: bool) -> None:
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
         if on:
@@ -102,6 +117,7 @@ class Controller(QObject):
         self.hotkeys.mouse_pressed.connect(self.on_mouse_pressed, Qt.QueuedConnection)
         self.hotkeys.error.connect(lambda m: self.tray.showMessage(APP_NAME, m, QSystemTrayIcon.Warning),
                                    Qt.QueuedConnection)
+        fix_autostart_path()
         self._build_tray()
         self.hotkeys.start(self.cfg.hotkey, self.cfg.mouse_button, self.cfg.suppress_mouse_button)
 
@@ -268,6 +284,10 @@ def selftest(out_path: str) -> int:
         lines_out.append(f"ru ocr: {ocr.russian_language()}")
         lines_out.append(f"lemma: {simplemma.lemmatize('struggling', lang='en')} {simplemma.lemmatize('домой', lang='ru')}")
         lines_out.append(f"irregular: {irregular.lookup('went')[0].forms_text}")
+        import keyring
+        from .config import get_secret
+        lines_out.append(f"secrets: {type(keyring.get_keyring()).__name__}, deepl_key "
+                         f"{'найден' if get_secret('deepl_key') else 'не найден'}")
         code = 0
     except Exception as e:  # noqa: BLE001
         import traceback
