@@ -100,6 +100,11 @@ class SettingsDialog(QDialog):
         self.theme.addItem("светлая", "light")
         self.theme.setCurrentIndex(max(0, self.theme.findData(cfg.theme)))
         form.addRow("Тема", self.theme)
+        self.screen_mode = QComboBox()
+        self.screen_mode.addItem("сразу поверх текста — прочитал и Esc", "overlay")
+        self.screen_mode.addItem("выбрать абзацы → перевод в отдельном окне", "pick")
+        self.screen_mode.setCurrentIndex(max(0, self.screen_mode.findData(cfg.screen_mode)))
+        form.addRow("Хоткей мимо слова", self.screen_mode)
         root.addLayout(form)
 
         self.error = QLabel("")
@@ -150,6 +155,7 @@ class SettingsDialog(QDialog):
             auto_select=self.auto.isChecked(),
             strip_stress_in_card=self.stress.isChecked(),
             theme=self.theme.currentData(),
+            screen_mode=self.screen_mode.currentData(),
         )
 
     def _accept(self):

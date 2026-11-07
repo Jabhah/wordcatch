@@ -18,6 +18,7 @@ from .layout import context_of, group_blocks, word_at
 from .translate.service import Translator
 from .ui.common import apply_theme, run_async, theme_for
 from .ui.result_window import ResultWindow
+from .ui.screen_overlay import ScreenOverlay
 from .ui.screen_picker import ScreenPicker
 from .ui.settings_dialog import SettingsDialog
 from .ui.word_popup import WordPopup
@@ -108,7 +109,7 @@ class Controller(QObject):
         self.theme = theme_for(self.cfg.theme)
         apply_theme(qapp, self.theme)
         self.popup: WordPopup | None = None
-        self.picker: ScreenPicker | None = None
+        self.picker: ScreenPicker | ScreenOverlay | None = None  # открытый режим «весь экран»
         self.windows: list[ResultWindow] = []
         self.busy = False
 
@@ -223,7 +224,7 @@ class Controller(QObject):
             anchor = crop.to_logical(hit.raw.rect).toAlignedRect()
             self.show_word(hit.word, ctx.text, ctx.start, ctx.end, anchor)
         else:
-            self.show_picker(full)
+            self.show_screen(full)
 
     def show_word(self, word: str, paragraph: str, start: int, end: int, anchor: QRect):
         if self.popup is not None:
@@ -237,15 +238,56 @@ class Controller(QObject):
         if self.popup is p:
             self.popup = None
 
-    # ---------- режим блоков ----------
-    def show_picker(self, shot: Shot):
+    # ---------- весь экран ----------
+    def _track_screen(self, widget):
+        """Пока открыт режим экрана, хоткей не срабатывает повторно."""
+        self.picker = widget
+        widget.destroyed.connect(lambda *_, w=widget: setattr(self, "picker", None) if self.picker is w else None)
+
+    def _ocr_blocks(self, shot: Shot):
+        return group_blocks(capture.recognize(shot, min(self.cfg.ocr_scale, 1.5)))
+
+    def show_screen(self, shot: Shot):
+        if self.cfg.screen_mode == "pick":
+            self.show_picker(shot)
+        else:
+            self.show_overlay(shot)
+
+    def show_overlay(self, shot: Shot):
+        """Быстрый режим: перевод поверх абзацев, прочитал — Esc."""
+        overlay = ScreenOverlay(shot, self.theme)
+        self._track_screen(overlay)
+        state = {"blocks": None}
+        overlay.to_window.connect(self.show_result)
+        overlay.to_picker.connect(lambda: self.show_picker(shot, state["blocks"]))
+        overlay.start()
+
+        def alive():
+            return self.picker is overlay
+
+        def on_blocks(blocks):
+            state["blocks"] = blocks
+            if not alive():
+                return
+            texts = overlay.set_blocks(blocks)
+            if texts:
+                run_async(self.translator.texts, texts,
+                          done=lambda tr: overlay.set_translations(tr) if alive() else None,
+                          failed=lambda m: overlay.set_error(f"Перевод не удался: {m}") if alive() else None)
+
+        run_async(self._ocr_blocks, shot, done=on_blocks,
+                  failed=lambda m: overlay.set_error(m) if alive() else None)
+
+    def show_picker(self, shot: Shot, blocks=None):
         picker = ScreenPicker(shot, self.theme)
         picker.chosen.connect(self.show_result)
-        picker.destroyed.connect(lambda *_: setattr(self, "picker", None))
-        self.picker = picker
+        self._track_screen(picker)
         picker.start()
-        run_async(lambda: group_blocks(capture.recognize(shot, min(self.cfg.ocr_scale, 1.5))),
-                  done=lambda blocks: picker.set_blocks(blocks) if self.picker is picker else None,
+        if blocks is not None:
+            picker.set_blocks(blocks)
+            return
+        run_async(self._ocr_blocks, shot,
+                  done=lambda b: picker.set_blocks(b) if self.picker is picker else None,
                   failed=lambda m: picker.set_error(m) if self.picker is picker else None)
 
     def show_result(self, texts: list[str]):

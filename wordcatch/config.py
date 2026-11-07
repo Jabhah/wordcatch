@@ -78,6 +78,7 @@ class Config:
     strip_stress_in_card: bool = True
     ocr_scale: float = 2.0
     theme: str = "dark"               # dark / light
+    screen_mode: str = "overlay"      # overlay = перевод поверх текста, pick = выбор абзацев и окно
 
     @classmethod
     def path(cls) -> Path:
